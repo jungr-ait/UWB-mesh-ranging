@@ -66,6 +66,8 @@ config = NodeConfig();
 config.x = 0;
 config.y = 40;
 node_configs{end+1, 1} = config;
+save('./data/t1_node_config_4n.mat', 'node_configs');
+
 
 %% Test 2: 4 Nodes, all in range, no movement, random wakeup
 node_configs = {};
@@ -97,6 +99,8 @@ config.x = 0;
 config.y = 40;
 config.enterTime = {0, 1000};
 node_configs{end+1, 1} = config;
+save('./data/t2_node_config_4n.mat', 'node_configs');
+
 
 %% Test 3: 4 Nodes, random location, no movement, simultaneous wakeup
 node_configs = {};
@@ -116,6 +120,8 @@ node_configs{end+1, 1} = config;
 % Node 4
 config = NodeConfig();
 node_configs{end+1, 1} = config;
+
+save('./data/t3_node_config_4n.mat', 'node_configs');
 
 %% Test 4: 4 Nodes, random location, no movement, random wakeup
 node_configs = {};
@@ -140,6 +146,7 @@ config = NodeConfig();
 config.enterTime = {0, 1000};
 node_configs{end+1, 1} = config;
 
+save('./data/t4_node_config_4n.mat', 'node_configs');
 %% Test 5: 4 Nodes, random location, semi-random trajectory, simultaneous wakeup
 % trajectory start time is random
 % velocity is fixed
@@ -185,6 +192,7 @@ config.maxSteering = 20;
 config.samplePoints = config.travelDistance;
 node_configs{end+1, 1} = config;
 
+save('./data/t5_node_config_4n.mat', 'node_configs');
 %% Test 6: 6 Nodes in two groups, simultaneous wakeup, merging after initialization could be complete
 node_configs = {};
 

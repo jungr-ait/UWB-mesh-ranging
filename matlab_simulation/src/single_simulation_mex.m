@@ -43,8 +43,7 @@ close all;
 global collisionsDetectable;
 collisionsDetectable = false;
 
-base_path = '/path/to/base/dir';
-
+base_path = [getParentDir(mfilename('fullpath'),2), '/'];
 batchNo = 1;
 simIdx = 1;
 randomSeed = 1605185814;
@@ -73,8 +72,8 @@ node_configs = load(strcat(node_config_path, batch_data_table.node_config{config
 
 configs.numNodes = numNodes;
 
-configs.createStatistics = false;
-configs.showAnimation = false;
+configs.createStatistics = true;
+configs.showAnimation = true;
 configs.saveAnimation = false;
 configs.saveDiagrams = false;
 configs.verbose = false;

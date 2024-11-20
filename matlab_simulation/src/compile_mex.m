@@ -38,6 +38,14 @@
 
 % compile mex
 
-cd '/path/to/c/code/src'
+base_path = [getParentDir(mfilename('fullpath'),2), '/'];
+base_path_src = [getParentDir(mfilename('fullpath'),3), '/'];
+src_dir = [base_path_src, '/mesh_protocol/src'];
+cd(src_dir)
+
 mex -R2018a MatlabWrapper.c Config.c Driver.c GuardConditions.c Message.c MessageHandler.c Neighborhood.c NetworkManager.c Node.c RandomNumbers.c RangingManager.c Scheduler.c SlotMap.c StateActions.c StateMachine.c TimeKeeping.c Util.c LCG.c ProtocolClock.c
-cd '/path/to/base/dir/src‚'
+
+disp('copy generatex mex file to the src directory...');
+copyfile([src_dir, '/MatlabWrapper.mexa64'], [base_path, '/src/']);
+
+cd(base_path)

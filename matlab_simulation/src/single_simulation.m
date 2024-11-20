@@ -38,8 +38,7 @@
 
 % Single Simulation Script
 
-base_path = '/path/to/base/dir';
-
+base_path = [getParentDir(mfilename('fullpath'),2), '/'];
 batchNo = 1;
 simIdx = 1;
 randomSeed = 6537851;
