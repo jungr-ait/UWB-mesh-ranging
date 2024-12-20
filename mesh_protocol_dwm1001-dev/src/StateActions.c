@@ -48,7 +48,7 @@ void StateActions_ListeningUnconnectedIncomingMsgAction(Node node, Message msg) 
 
 void StateActions_ListeningUnconnectedTimeTicAction(Node node) {
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
-  
+
   // check if the initial wait time (time to check if there are already networks) is over
   bool waitTimeOver = TimeKeeping_InitialWaitTimeOver(node);
   bool nothingScheduled = Scheduler_NothingScheduledYet(node);
@@ -57,7 +57,7 @@ void StateActions_ListeningUnconnectedTimeTicAction(Node node) {
   if (waitTimeOver && nothingScheduled) {
     Scheduler_ScheduleNextPing(node);
   };
-  
+
   // in case a schedule was missed, cancel the schedule
   int64_t timeNextSchedule = Scheduler_GetTimeOfNextSchedule(node);
   if (localTime > timeNextSchedule && timeNextSchedule != -1) {
@@ -80,6 +80,7 @@ void StateActions_ListeningConnectedTimeTicAction(Node node) {
   SlotMap_RemoveExpiredSlotsFromTwoHopSlotMap(node);
   SlotMap_RemoveExpiredSlotsFromThreeHopSlotMap(node);
 
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   // release expired pending and own slots
   int8_t removedPending[NUM_SLOTS];
   int8_t removedOwn[NUM_SLOTS];
@@ -98,7 +99,7 @@ void StateActions_ListeningConnectedTimeTicAction(Node node) {
     Scheduler_CancelScheduledPing(node);
   };
 
-  // remove absent neighbors (nodes that haven't been heard for a certain 
+  // remove absent neighbors (nodes that haven't been heard for a certain
   // period of time)
   Neighborhood_RemoveAbsentNeighbors(node);
 
@@ -184,7 +185,7 @@ void StateActions_RangingResultTimeTicAction(Node node, Message finalMsgIn) {
   bool sendingFinished = Driver_SendingFinished(node);
 
   // send result if no transmission is ongoing
-  if (sendingFinished) { 
+  if (sendingFinished) {
     MessageHandler_SendRangingResultMessage(node, finalMsgIn);
   };
 };

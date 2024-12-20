@@ -40,23 +40,23 @@
 
 static bool isAcknowledged(Node node, int8_t queriedPendingSlot);
 static bool oneHopSlotIsExpired(Node node, int8_t currentSlot, int64_t timeout);
-static void updateMultiHopSlotMap(Node node, Message msg, int *multiHopSlotMapStatus, int8_t *multiHopSlotMapIds, int64_t *multiHopSlotMapLastUpdate);
+static void updateMultiHopSlotMap(Node node, Message msg, int8_t *multiHopSlotMapStatus, int8_t *multiHopSlotMapIds, int64_t *multiHopSlotMapLastUpdate);
 static bool slotReportedColliding(Message msg, int8_t slotNum);
 static bool slotReportedOccupiedByOtherNode(Node node, Message msg, int8_t slotNum);
-static void removeExpiredSlotsFromSlotMap(Node node, int *slotMapStatus, int8_t *slotMapIds, int64_t *slotMapLastUpdated);
+static void removeExpiredSlotsFromSlotMap(Node node, int8_t *slotMapStatus, int8_t *slotMapIds, int64_t *slotMapLastUpdated);
 static int8_t findFreeSlotsInThreeHopNeighborhood(Node node, int8_t *freeSlots);
 static int8_t findFreeForThisNodeSlotsInThreeHopNeighborhood(Node node, int8_t *freeSlots);
 static int8_t findCollidingSlotsInThreeHopNeighborhood(Node node, int8_t *collidingSlots);
 static int8_t getNextSlotFromSelection(Node node, int8_t *selection, int8_t size);
 
-SlotMap SlotMap_Create() {
+SlotMap SlotMap_Create(int8_t const num_slots) {
   SlotMap self = calloc(1, sizeof(SlotMapStruct));
   self->numPendingSlots = 0;
   self->numOwnSlots = 0;
   self->lastReservationTime = 0;
-
+  self->NUM_SLOTS = num_slots;
   // initialize all slot maps
-  for(int i = 0; i < NUM_SLOTS; ++i) {
+  for(int i = 0; i < MAX_NUM_SLOTS; ++i) {
     self->oneHopSlotsStatus[i] = FREE;
     self->oneHopSlotsIds[i] = 0;
     self->oneHopSlotsLastUpdated[i] = 0;
@@ -92,9 +92,9 @@ void SlotMap_UpdateOneHopSlotMap(Node node, Message msg, int8_t currentSlot) {
   */
 
   // convert slot num to index by subtracting 1
-  int8_t currentSlotIndex = currentSlot - 1; 
+  int8_t currentSlotIndex = currentSlot - 1;
   // current status of the slot in one hop slot map
-  int currentStatus = node->slotMap->oneHopSlotsStatus[currentSlotIndex]; 
+  int8_t currentStatus = node->slotMap->oneHopSlotsStatus[currentSlotIndex];
 
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
   switch(msg->type) {
@@ -120,7 +120,7 @@ void SlotMap_UpdateOneHopSlotMap(Node node, Message msg, int8_t currentSlot) {
             node->slotMap->oneHopSlotsLastUpdated[currentSlotIndex] = localTime;
           } else {
             // if the slot is currently occupied by a different node, it is only overwritten
-            // when the slot is expired (the node that currently reserved the slot did not use 
+            // when the slot is expired (the node that currently reserved the slot did not use
             // it for a while), otherwise, the current node will keep the slot
             if(oneHopSlotIsExpired(node, currentSlot, node->config->occupiedTimeout)) {
               node->slotMap->oneHopSlotsStatus[currentSlotIndex] = OCCUPIED;
@@ -142,7 +142,7 @@ void SlotMap_UpdateOneHopSlotMap(Node node, Message msg, int8_t currentSlot) {
       };
 
       /** if the ping is a new reservation attempt, record that;
-      /   it is considered a new reservation if the two hop slot map in the message does not state this slot as 
+      /   it is considered a new reservation if the two hop slot map in the message does not state this slot as
       /   reserved by the sender (i. e. from the perspective of the sending node the slot was not acknowledged yet)
       */
       if (msg->twoHopSlotIds[currentSlotIndex] != msg->senderId) {
@@ -154,7 +154,7 @@ void SlotMap_UpdateOneHopSlotMap(Node node, Message msg, int8_t currentSlot) {
 };
 
 void SlotMap_UpdateTwoHopSlotMap(Node node, Message msg) {
-  /** To update the two hop slot map of this node, the information from the one hop slot map 
+  /** To update the two hop slot map of this node, the information from the one hop slot map
   *   from the message is used (one hop of the neighbor node is two hop of this node)
   */
   msg->multiHopStatus = &msg->oneHopSlotStatus[0];
@@ -164,7 +164,7 @@ void SlotMap_UpdateTwoHopSlotMap(Node node, Message msg) {
 };
 
 void SlotMap_UpdateThreeHopSlotMap(Node node, Message msg) {
-  /** To update the three hop slot map of this node, the information from the two hop slot map 
+  /** To update the three hop slot map of this node, the information from the two hop slot map
   *   from the message is used (two hop of the neighbor node is three hop of this node)
   */
   msg->multiHopStatus = &msg->twoHopSlotStatus[0];
@@ -173,15 +173,17 @@ void SlotMap_UpdateThreeHopSlotMap(Node node, Message msg) {
   updateMultiHopSlotMap(node, msg, &node->slotMap->threeHopSlotsStatus[0], &node->slotMap->threeHopSlotsIds[0], &node->slotMap->threeHopSlotsLastUpdated[0]);
 };
 
-bool SlotMap_GetOneHopSlotMapStatus(Node node, int *buffer, int8_t size) {
+bool SlotMap_GetOneHopSlotMapStatus(Node node, int8_t *buffer, int8_t size) {
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   if(size < NUM_SLOTS) {
     return false;
   };
-  memcpy(buffer, &node->slotMap->oneHopSlotsStatus[0], sizeof(int) * size);
+  memcpy(buffer, &node->slotMap->oneHopSlotsStatus[0], sizeof(int8_t) * size);
   return true;
 };
 
 bool SlotMap_GetOneHopSlotMapIds(Node node, int8_t *buffer, int8_t size) {
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   if(size < NUM_SLOTS) {
     return false;
   };
@@ -190,31 +192,35 @@ bool SlotMap_GetOneHopSlotMapIds(Node node, int8_t *buffer, int8_t size) {
 };
 
 
-bool SlotMap_GetTwoHopSlotMapStatus(Node node, int *buffer, int8_t size) {
+bool SlotMap_GetTwoHopSlotMapStatus(Node node, int8_t *buffer, int8_t size) {
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   if(size < NUM_SLOTS) {
     return false;
   };
-  memcpy(buffer, &node->slotMap->twoHopSlotsStatus[0], sizeof(int) * size);
+  memcpy(buffer, &node->slotMap->twoHopSlotsStatus[0], sizeof(int8_t) * size);
   return true;
 };
 
 bool SlotMap_GetTwoHopSlotMapIds(Node node, int8_t *buffer, int8_t size) {
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   if(size < NUM_SLOTS) {
     return false;
-  }; 
+  };
   memcpy(buffer, &node->slotMap->twoHopSlotsIds[0], sizeof(int8_t) * size);
   return true;
 };
 
-bool SlotMap_GetThreeHopSlotMapStatus(Node node, int *buffer, int8_t size) {
+bool SlotMap_GetThreeHopSlotMapStatus(Node node, int8_t *buffer, int8_t size) {
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   if(size < NUM_SLOTS) {
     return false;
   };
-  memcpy(buffer, &node->slotMap->threeHopSlotsStatus[0], sizeof(int) * size);
+  memcpy(buffer, &node->slotMap->threeHopSlotsStatus[0], sizeof(int8_t) * size);
   return true;
 };
 
 bool SlotMap_GetThreeHopSlotMapIds(Node node, int8_t *buffer, int8_t size) {
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   if(size < NUM_SLOTS) {
     return false;
   };
@@ -227,8 +233,8 @@ int8_t SlotMap_CheckOwnSlotsForCollisions(Node node, Message msg, int8_t *buffer
   if(size < numOwnSlots) {
     return -1;
   };
-  
-  int8_t collidingSlotCnt = 0; 
+
+  int8_t collidingSlotCnt = 0;
 
   // check for all own slots if they are reported as colliding in the message or as occupied by a different node;
   // if so, they are considered colliding
@@ -245,8 +251,8 @@ int8_t SlotMap_CheckPendingSlotsForCollisions(Node node, Message msg, int8_t *bu
   int8_t numPendingSlots = node->slotMap->numPendingSlots;
   if(size < numPendingSlots)
     return -1;
-  
-  int8_t collidingSlotCnt = 0; 
+
+  int8_t collidingSlotCnt = 0;
 
   // check for all pending slots if they are reported as colliding in the message or as occupied by a different node;
   // if so, they are considered colliding
@@ -270,10 +276,11 @@ bool SlotMap_SlotReservationGoalMet(Node node) {
 int8_t SlotMap_GetReservableSlot(Node node) {
   /** A slot is considered reservable by this node if it is either free for a three hop neighborhood
   *   (meaning in all three slot maps of this node) or if it is colliding in any one of the three slot maps
-  *   of this node and at the same time not reported/perceived as occupied by a node; colliding slots must 
-  *   be considered reservable to avoid deadlocks (e.g. two nodes trying to reserve the last two free slots 
+  *   of this node and at the same time not reported/perceived as occupied by a node; colliding slots must
+  *   be considered reservable to avoid deadlocks (e.g. two nodes trying to reserve the last two free slots
   *   alternatingly)
   */
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   int8_t freeSlots[NUM_SLOTS];
   int8_t numFreeSlots = findFreeForThisNodeSlotsInThreeHopNeighborhood(node, &freeSlots[0]);
 
@@ -372,9 +379,10 @@ bool SlotMap_ChangePendingToOwn(Node node, int8_t slotNum) {
 };
 
 bool SlotMap_OwnNetworkExists(Node node, int8_t *collidingSlots, int8_t collidingSlotsSize) {
-  
+
   // check if another node in this network has reserved a slot;
   // if so, the creation was successful and this network exists
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   for (int i = 0; i < NUM_SLOTS; ++i) {
     if (node->slotMap->oneHopSlotsStatus[i] == OCCUPIED) {
       return true;
@@ -415,12 +423,13 @@ bool SlotMap_OwnNetworkExists(Node node, int8_t *collidingSlots, int8_t collidin
 bool SlotMap_ClearToSend(Node node) {
   int8_t currentSlot = TimeKeeping_CalculateCurrentSlotNum(node);
   // it is okay to send if the current slot is free, colliding or reserved by this node or if no frame has started (no network yet)
-  return (SlotMap_SlotIsFreeForThisNode(node, currentSlot) || SlotMap_SlotIsColliding(node, currentSlot) || 
+  return (SlotMap_SlotIsFreeForThisNode(node, currentSlot) || SlotMap_SlotIsColliding(node, currentSlot) ||
     SlotMap_IsOwnSlot(node, currentSlot) || SlotMap_IsPendingSlot(node, currentSlot) || currentSlot == 0);
 };
 
 bool SlotMap_SlotIsFree(Node node, int8_t slotNum) {
   // find all "three hop free" slots
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   int8_t freeSlots[NUM_SLOTS];
   int8_t numFreeSlots = findFreeSlotsInThreeHopNeighborhood(node, &freeSlots[0]);
 
@@ -437,9 +446,10 @@ bool SlotMap_SlotIsFree(Node node, int8_t slotNum) {
 
 bool SlotMap_SlotIsFreeForThisNode(Node node, int8_t slotNum) {
   // find all "three hop free" slots and slots that are reported being occupied by this node
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   int8_t freeSlots[NUM_SLOTS];
   int8_t numFreeSlots = findFreeForThisNodeSlotsInThreeHopNeighborhood(node, &freeSlots[0]);
-  
+
   // check if the queried slot is among the free slots
   int16_t idx = Util_Int8tArrayFindElement(&freeSlots[0], slotNum, numFreeSlots);
   if (idx != -1) {
@@ -453,6 +463,7 @@ bool SlotMap_SlotIsFreeForThisNode(Node node, int8_t slotNum) {
 
 bool SlotMap_SlotIsColliding(Node node, int8_t slotNum) {
   // find all colliding slots
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   int8_t collidingSlots[NUM_SLOTS];
   int8_t numCollidingSlots = findCollidingSlotsInThreeHopNeighborhood(node, &collidingSlots[0]);
 
@@ -482,12 +493,12 @@ int8_t SlotMap_GetAcknowledgedPendingSlots(Node node, int8_t *buffer, int8_t siz
 };
 
 int8_t SlotMap_GetPendingSlots(Node node, int8_t *buffer, int8_t size) {
-  
+
   if(size < node->slotMap->numPendingSlots) {
     // buffer too small
     return -1;
   };
-  
+
   for(int i = 0; i < node->slotMap->numPendingSlots; ++i) {
     buffer[i] = node->slotMap->pendingSlots[i];
   };
@@ -540,10 +551,10 @@ bool SlotMap_ReleaseOwnSlot(Node node, int8_t slotNum) {
   };
 
   // remove from own
-  // decrement numOwnSlots 
-  int8_t newNumOwn = --node->slotMap->numOwnSlots; 
+  // decrement numOwnSlots
+  int8_t newNumOwn = --node->slotMap->numOwnSlots;
   // let last element of ownSlots array overwrite the own slot that has to be removed (as order is not important)
-  node->slotMap->ownSlots[idx] = node->slotMap->ownSlots[newNumOwn]; 
+  node->slotMap->ownSlots[idx] = node->slotMap->ownSlots[newNumOwn];
   return true;
 };
 
@@ -555,12 +566,12 @@ bool SlotMap_ReleasePendingSlot(Node node, int8_t slotNum) {
   };
 
   // remove from pending
-  // decrement numPendingSlots 
-  int8_t newNumPending = --node->slotMap->numPendingSlots; 
+  // decrement numPendingSlots
+  int8_t newNumPending = --node->slotMap->numPendingSlots;
   // let last element of pendingSlots array overwrite the pending slot that has to be removed (as order is not important)
-  node->slotMap->pendingSlots[idx] = node->slotMap->pendingSlots[newNumPending]; 
+  node->slotMap->pendingSlots[idx] = node->slotMap->pendingSlots[newNumPending];
   // set the slot that has overwritten the other to -1 again
-  node->slotMap->pendingSlots[newNumPending] = -1; 
+  node->slotMap->pendingSlots[newNumPending] = -1;
   // make sure to do the same for the nodes who acknowledged or need to acknowledge the other pending slot
   for (int i = 0; i < (MAX_NUM_NODES - 1); ++i) {
     node->slotMap->pendingSlotAcknowledgedBy[idx][i] = node->slotMap->pendingSlotAcknowledgedBy[newNumPending][i];
@@ -583,15 +594,16 @@ void SlotMap_RemoveExpiredSlotsFromThreeHopSlotMap(Node node) {
   removeExpiredSlotsFromSlotMap(node, &node->slotMap->threeHopSlotsStatus[0], &node->slotMap->threeHopSlotsIds[0], &node->slotMap->threeHopSlotsLastUpdated[0]);
 };
 
-static void removeExpiredSlotsFromSlotMap(Node node, int *slotMapStatus, int8_t *slotMapIds, int64_t *slotMapLastUpdated) {
+static void removeExpiredSlotsFromSlotMap(Node node, int8_t *slotMapStatus, int8_t *slotMapIds, int64_t *slotMapLastUpdated) {
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
 
   int32_t timeout = 0;
   // iterate over every slot in the slot map that was passed to this function and set the status to FREE
   // if the slot expired/timed out
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   for(int i = 0; i < NUM_SLOTS; ++i) {
     int slotNum = i+1;
-    if (SlotMap_IsOwnSlot(node, slotNum)) { 
+    if (SlotMap_IsOwnSlot(node, slotNum)) {
       timeout = node->config->ownSlotExpirationTimeOut;
     } else {
       timeout = node->config->slotExpirationTimeOut;
@@ -610,7 +622,7 @@ int16_t SlotMap_RemoveExpiredPendingSlots(Node node, int8_t *buffer, int8_t size
   int8_t expiredPendingSlots[MAX_NUM_PENDING_SLOTS];
   int8_t numExpiredPending = 0;
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
-  
+
   // find expired pending slots
   for(int i = 0; i < node->slotMap->numPendingSlots; ++i) {
     if (localTime > node->slotMap->localTimePendingSlotAdded[i] + node->config->ownSlotExpirationTimeOut) {
@@ -623,7 +635,7 @@ int16_t SlotMap_RemoveExpiredPendingSlots(Node node, int8_t *buffer, int8_t size
   if (numExpiredPending > size) {
     return -1;
   };
-  
+
   // release expired pending slots
   for(int i = 0; i < numExpiredPending; ++i) {
     SlotMap_ReleasePendingSlot(node, expiredPendingSlots[i]);
@@ -638,7 +650,7 @@ int16_t SlotMap_RemoveExpiredOwnSlots(Node node, int8_t *buffer, int8_t size) {
   int8_t expiredOwnSlots[MAX_NUM_PENDING_SLOTS];
   int8_t numExpiredOwn = 0;
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
-  
+
   // find expired own slots
   for(int i = 0; i < node->slotMap->numOwnSlots; ++i) {
     int8_t slotNum = node->slotMap->ownSlots[i];
@@ -660,7 +672,7 @@ int16_t SlotMap_RemoveExpiredOwnSlots(Node node, int8_t *buffer, int8_t size) {
     SlotMap_ReleaseOwnSlot(node, expiredOwnSlots[i]);
 
     // add removed slot to buffer
-    buffer[i] = expiredOwnSlots[i];  
+    buffer[i] = expiredOwnSlots[i];
   };
   return numExpiredOwn;
 };
@@ -673,7 +685,7 @@ static bool isAcknowledged(Node node, int8_t queriedPendingSlot) {
     };
 
     if (node->slotMap->pendingSlots[i] == queriedPendingSlot) {
-      // check if enough neighbors have acknowledged the slot 
+      // check if enough neighbors have acknowledged the slot
       // (number of neighbors at the time the slot was reserved need to acknowledge)
 
       int8_t numNeighborsThatNeedToAck = 0;
@@ -692,7 +704,7 @@ static bool isAcknowledged(Node node, int8_t queriedPendingSlot) {
           break;
         };
       };
-      
+
       if (numNeighborsThatHaveAcked >= numNeighborsThatNeedToAck) {
         return true;
       } else {
@@ -705,7 +717,7 @@ static bool isAcknowledged(Node node, int8_t queriedPendingSlot) {
 void SlotMap_ExtendTimeouts(Node node) {
   // extend the timeout by the time the nodes sleep at max
   int64_t extensionTime = (node->config->frameLength * node->config->sleepFrames);
-
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   for (int i = 0; i < NUM_SLOTS; ++i) {
     if (node->slotMap->oneHopSlotsStatus[i] != FREE) {
       node->slotMap->oneHopSlotsLastUpdated[i] += extensionTime;
@@ -733,16 +745,16 @@ static bool multiHopSlotIsExpired(Node node, int8_t currentSlot, int64_t timeout
   return (localTime >= (multiHopLastUpdated[currentSlot - 1] + timeout));
 };
 
-static void updateMultiHopSlotMap(Node node, Message msg, int *multiHopSlotMapStatus, int8_t *multiHopSlotMapIds, int64_t *multiHopSlotMapLastUpdate) {
+static void updateMultiHopSlotMap(Node node, Message msg, int8_t *multiHopSlotMapStatus, int8_t *multiHopSlotMapIds, int64_t *multiHopSlotMapLastUpdate) {
   // this function is used to update either two- or three-hop slot map (depending on which slot map is passed) to avoid code duplication
-
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   // iterate over all slots
   for(int slotIdx = 0; slotIdx < NUM_SLOTS; ++slotIdx) {
     // get current status and ID of the slot
-    int currentStatus = multiHopSlotMapStatus[slotIdx];
+    int8_t currentStatus = multiHopSlotMapStatus[slotIdx];
     int8_t currentId = multiHopSlotMapIds[slotIdx];
     // get status and ID of the slot from the message
-    int newStatus = msg->multiHopStatus[slotIdx];
+    int8_t newStatus = msg->multiHopStatus[slotIdx];
     int8_t newId = msg->multiHopIds[slotIdx];
 
     // first check if one hop and two hop are reported occupied by different nodes; if so, set slot to colliding
@@ -755,7 +767,7 @@ static void updateMultiHopSlotMap(Node node, Message msg, int *multiHopSlotMapSt
         continue;
       };
     };
-    
+
     switch(newStatus) {
       case OCCUPIED:
         switch(currentStatus) {
@@ -795,11 +807,11 @@ static void updateMultiHopSlotMap(Node node, Message msg, int *multiHopSlotMapSt
             };
             break;
         };
-        
+
         int8_t slot = slotIdx + 1;
         bool slotIsOwnSlot = SlotMap_IsOwnSlot(node, slot);
         bool slotIsPendingSlot = SlotMap_IsPendingSlot(node, slot);
-        
+
         // if slot is own or pending slot but reported occupied by another node, set it to colliding to
         // prevent deadlocks and instead make it reservable again
         if(slotIsOwnSlot || slotIsPendingSlot) {
@@ -848,7 +860,7 @@ static bool slotReportedOccupiedByOtherNode(Node node, Message msg, int8_t slotN
 };
 
 static int8_t findFreeSlotsInThreeHopNeighborhood(Node node, int8_t *freeSlots) {
-  
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   // first find free slots in the individual slot maps
   int8_t oneHopFreeSlots[NUM_SLOTS];
   int8_t numOneHopFree = 0;
@@ -885,6 +897,7 @@ static int8_t findFreeSlotsInThreeHopNeighborhood(Node node, int8_t *freeSlots) 
 };
 
 static int8_t findFreeForThisNodeSlotsInThreeHopNeighborhood(Node node, int8_t *freeSlots) {
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   // find slots that are either free or reported occupied by this node, so that this node can safely use them
   int8_t oneHopFreeSlots[NUM_SLOTS];
   int8_t numOneHopFree = 0;
@@ -925,9 +938,9 @@ static int8_t findFreeForThisNodeSlotsInThreeHopNeighborhood(Node node, int8_t *
 };
 
 static int8_t findCollidingSlotsInThreeHopNeighborhood(Node node, int8_t *collidingSlots) {
-  // find slots that are colliding in at least one of the slot maps, but at the same time not occupied in any of the other two 
+  // find slots that are colliding in at least one of the slot maps, but at the same time not occupied in any of the other two
   // by a node other than this, because then they are not reservable by this node
-
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   int8_t oneHopCollidingSlots[NUM_SLOTS];
   int8_t numOneHopColliding = 0;
   for (int i = 0; i < NUM_SLOTS; ++i) {
@@ -976,7 +989,7 @@ static int8_t findCollidingSlotsInThreeHopNeighborhood(Node node, int8_t *collid
   // get union of the colliding slots of all slot maps
   memcpy(collidingSlots, &oneHopCollidingSlots[0], sizeof(int8_t) * numOneHopColliding);
   int8_t numCollidingSlots = numOneHopColliding;
-  
+
   // add colliding slots from two hop slot map that are not in already
   for (int i = 0; i < numTwoHopColliding; ++i) {
     int8_t element = twoHopCollidingSlots[i];
@@ -1001,12 +1014,13 @@ static int8_t findCollidingSlotsInThreeHopNeighborhood(Node node, int8_t *collid
 };
 
 static int8_t getNextSlotFromSelection(Node node, int8_t *selection, int8_t size) {
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
   // from a selection of slots, get the one that comes next
   int8_t currentSlot = TimeKeeping_CalculateCurrentSlotNum(node);
 
-  // array to hold all distances of the slots in the selection to the current slot 
+  // array to hold all distances of the slots in the selection to the current slot
   int8_t distanceFromCurrentSlot[MAX_NUM_PENDING_SLOTS + MAX_NUM_OWN_SLOTS];
-  
+
   // calculate the distance in slots from the current slot
   for(int i = 0; i < size; ++i) {
     distanceFromCurrentSlot[i] = selection[i] - currentSlot;

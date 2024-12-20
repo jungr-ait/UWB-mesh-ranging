@@ -94,14 +94,14 @@ bool GuardConditions_ListeningConToListeningUncAllowed(Node node) {
   int8_t numPending = SlotMap_GetPendingSlots(node, &pendingSlotBuffer[0], MAX_NUM_PENDING_SLOTS);
 
   bool otherNodeHasReservedASlot = false;
-  for (int i = 0; i < NUM_SLOTS; ++i) {
+  for (int i = 0; i < node->slotMap->NUM_SLOTS; ++i) {
     if (node->slotMap->oneHopSlotsStatus[i] == OCCUPIED)
      otherNodeHasReservedASlot = true;
   };
 
   /** It is also allowed to transition to unconnected if this slot does not have own or pending slots (no slot acknowledged)
-  *   AND if the current network was started by this node AND if no other node has reserved a slot; this likely means that no 
-  *   other node has received the initial ping of this node that was supposed to start a new network (because it collided or because 
+  *   AND if the current network was started by this node AND if no other node has reserved a slot; this likely means that no
+  *   other node has received the initial ping of this node that was supposed to start a new network (because it collided or because
   *   no other node was in range)
   */
   if (!((numOwn > 0)  || (numPending > 0)) && node->networkManager->currentNetworkStartedByThisNode && !otherNodeHasReservedASlot)
@@ -132,7 +132,7 @@ bool GuardConditions_RangingPollAllowed(Node node) {
     // if this node has no neighbors at all or no neighbors that ranging is due with, sending another poll is not allowed
     return false;
   };
-    
+
   int64_t remainingTime = TimeKeeping_GetTimeRemainingInCurrentSlot(node);
   int64_t nextScheduledTime = Scheduler_GetTimeOfNextSchedule(node);
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
@@ -177,25 +177,26 @@ bool GuardConditions_IdleingAllowed(Node node) {
   int8_t minNumFrames = 2;
   if (localTime - lastTimeIdled < minNumFrames * node->config->frameLength) {
     return false;
-  };  
+  };
 
-  // don't idle if a new neighbor joined within the last frame, unless it is already present in the slot maps 
+  // don't idle if a new neighbor joined within the last frame, unless it is already present in the slot maps
   // (i.e. it was already in the network and likely only changed its position)
   int64_t lastJoinedTime = Neighborhood_GetTimeWhenNewestNeighborJoined(node);
   int8_t newestNeighborId = Neighborhood_GetNewestNeighbor(node);
 
+  const int8_t NUM_SLOTS = node->slotMap->NUM_SLOTS;
   if (localTime - lastJoinedTime <= node->config->frameLength) {
-    int8_t oneHopSlotIds[NUM_SLOTS]; 
+    int8_t oneHopSlotIds[NUM_SLOTS];
     SlotMap_GetOneHopSlotMapIds(node, &oneHopSlotIds[0], NUM_SLOTS);
-    int8_t twoHopSlotIds[NUM_SLOTS]; 
+    int8_t twoHopSlotIds[NUM_SLOTS];
     SlotMap_GetTwoHopSlotMapIds(node, &twoHopSlotIds[0], NUM_SLOTS);
-    int8_t threeHopSlotIds[NUM_SLOTS]; 
+    int8_t threeHopSlotIds[NUM_SLOTS];
     SlotMap_GetThreeHopSlotMapIds(node, &threeHopSlotIds[0], NUM_SLOTS);
 
     bool notInOneHopSlotMap = (Util_Int8tArrayFindElement(&oneHopSlotIds[0], newestNeighborId, NUM_SLOTS) == -1); // if FindArrayElement returns -1, it means that the ID was not found in this node's oneHopSlotMap
     bool notInTwoHopSlotMap = (Util_Int8tArrayFindElement(&twoHopSlotIds[0], newestNeighborId, NUM_SLOTS) == -1); // if FindArrayElement returns -1, it means that the ID was not found in this node's twoHopSlotMap
     bool notInThreeHopSlotMap = (Util_Int8tArrayFindElement(&threeHopSlotIds[0], newestNeighborId, NUM_SLOTS) == -1); // if FindArrayElement returns -1, it means that the ID was not found in this node's threeHopSlotMap
-    
+
     bool neighborIsNew = (notInOneHopSlotMap && notInTwoHopSlotMap && notInThreeHopSlotMap);
     if (neighborIsNew) {
       return false;
@@ -222,13 +223,13 @@ bool GuardConditions_IdleToListeningConAllowedIncomingMsg(Node node, Message msg
 
   // check if ping is from a different network
   bool isForeignPing = NetworkManager_IsPingFromForeignNetwork(node, msg);
-
+  const int8_t NUM_SLOTS = node->slotMap->NUM_SLOTS;
   // check if sending node already has a slot in this network
-  int8_t oneHopSlotIds[NUM_SLOTS]; 
+  int8_t oneHopSlotIds[NUM_SLOTS];
   SlotMap_GetOneHopSlotMapIds(node, &oneHopSlotIds[0], NUM_SLOTS);
-  int8_t twoHopSlotIds[NUM_SLOTS]; 
+  int8_t twoHopSlotIds[NUM_SLOTS];
   SlotMap_GetTwoHopSlotMapIds(node, &twoHopSlotIds[0], NUM_SLOTS);
-  int8_t threeHopSlotIds[NUM_SLOTS]; 
+  int8_t threeHopSlotIds[NUM_SLOTS];
   SlotMap_GetThreeHopSlotMapIds(node, &threeHopSlotIds[0], NUM_SLOTS);
 
   bool notInOneHopSlotMap = (Util_Int8tArrayFindElement(&oneHopSlotIds[0], msg->senderId, NUM_SLOTS) == -1); // if FindArrayElement returns -1, it means that the senderId was not found in this node's oneHopSlotMap

@@ -38,16 +38,16 @@
 
 /** @file IndividualNodeConfig.h
 *   @brief Defines ID and random seed of node
-*/  
+*/
 
 #ifndef INDIVIDUAL_NODE_CONFIG_H
 #define INDIVIDUAL_NODE_CONFIG_H
 
-#define NODE_ID 1
-#define RANDOM_SEED 123456
+//#define NODE_ID 1
+//#define RANDOM_SEED 123456
 
-//#define NODE_ID 2
-//#define RANDOM_SEED 654321
+#define NODE_ID 2
+#define RANDOM_SEED 654321
 
 //#define NODE_ID 3
 //#define RANDOM_SEED 135791

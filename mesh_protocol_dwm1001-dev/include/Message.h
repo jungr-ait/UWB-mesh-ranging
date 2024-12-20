@@ -44,7 +44,12 @@
 
 /** Types a message can have */
 enum MessageTypes {
-  PING, COLLISION, POLL, RESPONSE, FINAL, RESULT
+  PING = 0,
+  COLLISION=1,
+  POLL=2,
+  RESPONSE=3,
+  FINAL=4,
+  RESULT=5
 };
 
 /** Time it takes to transmit a message in time tics
@@ -60,15 +65,15 @@ typedef struct MessageStruct * Message;
 typedef enum MessageTypes MessageTypes;
 typedef enum MessageSizes MessageSizes;
 
-/** 
+/**
 * type: MessageTypes type of the message
 * senderId: Node ID of the sender of the message
 * recipientId: Node ID of the intended recipient of the message (only for POLL, RESPONSE, FINAL and RESULT)
-* timestamp: local time of the receiving node at the time the message would arrive at the antenna in reality (preamble, NOT when the message is complete); 
+* timestamp: local time of the receiving node at the time the message would arrive at the antenna in reality (preamble, NOT when the message is complete);
 *   determined and added by MATLAB simulation
 * networkId: ID of the network the sending node belongs to
 * networkAge: age of the network the sending node belongs to as calculated by the sending node (in time tics)
-* timeSinceFrameStart: time tics since beginning of the current frame as counted by the sending node 
+* timeSinceFrameStart: time tics since beginning of the current frame as counted by the sending node
 * oneHopSlotStatus: array of the status of each slot as directly perceived ("one hop") by the sending node; see enum "SlotOccupancy" in SlotMap.h for possible values
 * oneHopSlotIds: array of the ID of nodes occupying each slot; 0 if slot is FREE
 * twoHopSlotStatus: array of the status of each slot as reported by neighbors ("two hop") of the sending node; see enum "SlotOccupancy" in SlotMap.h for possible values
@@ -83,14 +88,15 @@ typedef struct MessageStruct {
   MessageTypes type;
   int8_t senderId;
   int8_t recipientId;
-  int64_t timestamp;                  // timestamp of arrival 
+  int64_t timestamp;                  // timestamp of arrival
   uint8_t networkId;
   int64_t networkAge;                 // network age at time of sending (not at completion of the message - therefore arrival of preamble is used later)
   int64_t timeSinceFrameStart;
-  int oneHopSlotStatus[NUM_SLOTS];
-  int8_t oneHopSlotIds[NUM_SLOTS];
-  int twoHopSlotStatus[NUM_SLOTS];
-  int8_t twoHopSlotIds[NUM_SLOTS];
+  int8_t NUM_SLOTS;
+  int8_t oneHopSlotStatus[MAX_NUM_SLOTS];
+  int8_t oneHopSlotIds[MAX_NUM_SLOTS];
+  int8_t twoHopSlotStatus[MAX_NUM_SLOTS];
+  int8_t twoHopSlotIds[MAX_NUM_SLOTS];
   int64_t collisionTimes[MAX_NUM_COLLISIONS_RECORDED];  // used to report collisions to foreign networks (contains time since the collision happened, so it is independent of slot synchronization)
   int8_t numCollisions;               // number of collision times actually contained in the message
   double distance;

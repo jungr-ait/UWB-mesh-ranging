@@ -38,18 +38,23 @@
 
 /** @file Constants.h
 *   @brief Defines some constants that cannot got into config because their value is needed at compile time
-*/  
+*/
 
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
+#include <stdint.h>
 
 /** Write output to the console in simulation */
 // #define SIMULATION 1
 #define DEBUG 0
 #define DEBUG_VERBOSE 0
 
+
 /** Number of slots per frame */
-#define NUM_SLOTS 6
+static int8_t NUM_SLOTS_g = 10;
+
+/** Number of slots per frame */
+#define MAX_NUM_SLOTS 25
 
 /** Maximum number of pending slots per node */
 #define MAX_NUM_PENDING_SLOTS 5
@@ -58,7 +63,7 @@
 #define MAX_NUM_OWN_SLOTS 5
 
 /** Maximum number of nodes */
-#define MAX_NUM_NODES 6
+#define MAX_NUM_NODES 64
 
 /** Maximum number of collisions that are recorded for the current frame
 * If more collisions occur, the oldest will be overwritten

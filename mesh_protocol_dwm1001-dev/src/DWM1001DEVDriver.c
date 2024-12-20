@@ -40,6 +40,8 @@
 *
 */
 #include "../include/DWM1001_Constants.h"
+#include "../include/Node.h"
+#include "../include/SlotMap.h"
 #include "../include/Driver.h"
 #include "../deca_driver/deca_device_api.h"
 
@@ -66,7 +68,7 @@ static double distance;
 
 /*Transactions Counters */
 static volatile int tx_count = 0 ; // Successful transmit counter
-static volatile int rx_count = 0 ; // Successful receive counter 
+static volatile int rx_count = 0 ; // Successful receive counter
 
 /** END DECAWAVE RANGING VARIABLES */
 
@@ -79,7 +81,7 @@ static void final_msg_get_ts(const uint8 *ts_field, uint32 *ts);
 Driver Driver_Create(bool *txFinishedFlag, bool *isReceiving) {
   // allocate memory for the Driver struct
   Driver self = calloc(1, sizeof(DriverStruct));
-  
+
   self->txFinishedFlag = txFinishedFlag;
   self->sentMessage = false;
 
@@ -90,10 +92,10 @@ bool Driver_SendingFinished(Node node) {
   // if the txFinishedFlag is false, check if transmission is finished by now
   if (!(*node->driver->txFinishedFlag)) {
     // check if TXFRS bit (bit 7) is set, which means the transmission is finished
-    *node->driver->txFinishedFlag = dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS; 
+    *node->driver->txFinishedFlag = dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS;
   };
-  
-  return *node->driver->txFinishedFlag; 
+
+  return *node->driver->txFinishedFlag;
 };
 
 void Driver_TransmitPing(Node node, Message msg) {
@@ -105,51 +107,71 @@ void Driver_TransmitPing(Node node, Message msg) {
 
   /** Write the Message to the TX buffer of DW1000 */
   // write type
-  uint8_t buffer[127]; // 127 is maximum length in non-extended mode
+  int const max_msg_len = 127;
+  int8_t const num_slots = node->slotMap->NUM_SLOTS;
+  msg->NUM_SLOTS = node->slotMap->NUM_SLOTS;
+  uint8_t buffer[max_msg_len]; // 127 is maximum length in non-extended mode: 23 + NUM_SLOTS * 4
+
+  if(max_msg_len <= (23 + num_slots *4))
+  {
+    return;
+  }
+
   // set all to zero first
   memset(buffer, 0, 127);
-  // offset is the current index in the buffer 
+  // offset is the current index in the buffer
   int offset = 0;
   //dwt_writetodevice(TX_BUFFER_ID, offset, sizeof(msg->type), *msg->type);
-  int tmp = msg->type;
-  memcpy(&buffer[0], &tmp, sizeof(int));
+  int8_t tmp = (int8_t) msg->type;
+  memcpy(&buffer[0], &tmp, sizeof(int8_t));
+  offset += sizeof(int8_t);
 
   // write senderId
-  offset += sizeof(int);
   memcpy(&buffer[offset], &node->id, sizeof(int8_t));
-  // write recipientId
   offset += sizeof(int8_t);
-  memcpy(&buffer[offset], &msg->recipientId, sizeof(int8_t));
-  // write networkId
-  offset += sizeof(int8_t);
-  memcpy(&buffer[offset], &msg->networkId, sizeof(uint8_t));
-  // write networkAge
-  offset += sizeof(uint8_t);
-  memcpy(&buffer[offset], &msg->networkAge, sizeof(int64_t));
-  // write timeSinceFrameStart
-  offset += sizeof(int64_t);
-  memcpy(&buffer[offset], &msg->timeSinceFrameStart, sizeof(int64_t));
-  // write oneHopSlotStatus
-  offset += sizeof(int64_t);
-  memcpy(&buffer[offset], &msg->oneHopSlotStatus, sizeof(int) * NUM_SLOTS);
-  // write oneHopSlotIds
-  offset += (sizeof(int) * NUM_SLOTS);
-  memcpy(&buffer[offset], &msg->oneHopSlotIds, sizeof(int8_t) * NUM_SLOTS);
-  // write twoHopSlotStatus
-  offset += (sizeof(int8_t) * NUM_SLOTS);
-  memcpy(&buffer[offset], &msg->twoHopSlotStatus, sizeof(int) * NUM_SLOTS);
-  // write twoHopSlotIds
-  offset += (sizeof(int) * NUM_SLOTS);
-  memcpy(&buffer[offset], &msg->twoHopSlotIds, sizeof(int8_t) * NUM_SLOTS);
-  offset += (sizeof(int8_t) * NUM_SLOTS);
 
+  // write recipientId
+  memcpy(&buffer[offset], &msg->recipientId, sizeof(int8_t));
+  offset += sizeof(int8_t);
+
+  // write networkId
+  memcpy(&buffer[offset], &msg->networkId, sizeof(uint8_t));
+  offset += sizeof(uint8_t);
+
+  // write networkAge
+  memcpy(&buffer[offset], &msg->networkAge, sizeof(int64_t));
+  offset += sizeof(int64_t);
+
+  // write timeSinceFrameStart
+  memcpy(&buffer[offset], &msg->timeSinceFrameStart, sizeof(int64_t));
+  offset += sizeof(int64_t);
+
+  // write number of pings sent:
   memcpy(&buffer[offset], &pingsSent, sizeof(int16_t));
   offset += (sizeof(int16_t));
+
+  // write num_slots
+  memcpy(&buffer[offset], &num_slots, sizeof(int8_t));
+  offset += sizeof(int8_t);
+
+  // write oneHopSlotStatus
+  memcpy(&buffer[offset], &msg->oneHopSlotStatus, sizeof(int8_t) * num_slots);
+  offset += (sizeof(int8_t) * num_slots);
+  // write oneHopSlotIds
+  memcpy(&buffer[offset], &msg->oneHopSlotIds, sizeof(int8_t) * num_slots);
+  offset += (sizeof(int8_t) * num_slots);
+  // write twoHopSlotStatus
+  memcpy(&buffer[offset], &msg->twoHopSlotStatus, sizeof(int8_t) * num_slots);
+  offset += (sizeof(int8_t) * num_slots);
+  // write twoHopSlotIds
+  memcpy(&buffer[offset], &msg->twoHopSlotIds, sizeof(int8_t) * num_slots);
+  offset += (sizeof(int8_t) * num_slots);
+
 
   // clear TXFRS
   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
   // calculate length of frame
-  uint16_t length = offset + 2; // framelength must be two bytes longer than data to account for CRC 
+  uint16_t length = offset + 2; // framelength must be two bytes longer than data to account for CRC
   dwt_writetxdata(length, buffer, 0);
 
   /** Set transmit frame control register */
@@ -159,7 +181,9 @@ void Driver_TransmitPing(Node node, Message msg) {
   int ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
 
   if (ret == DWT_ERROR) {
+#if DEBUG_VERBOSE
     printf("TRANSMISSION FAILED \n");
+#endif
   };
 
   *node->driver->txFinishedFlag = false;
@@ -172,23 +196,87 @@ void Driver_TransmitPing(Node node, Message msg) {
   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
 
   *node->driver->txFinishedFlag = true;
-  
+
   // reenable the receiver
   dwt_rxenable(DWT_START_RX_IMMEDIATE);
 
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
   uint8_t slotNum = TimeKeeping_CalculateCurrentSlotNum(node);
 
-#if DEBUG
+#if DEBUG_VERBOSE
   printf("%d: Node %" PRId8 " sent ping %d in slot %" PRIu8 " \n", (int) localTime, node->id, pingsSent, slotNum);
-#endif
-
-#if EVAL
   printf("TX PING %d 0 %d %d %d \n", (int) node->id, (int) localTime, (int) slotNum, (int) pingsSent);
 #endif
 
   pingsSent += 1;
 };
+
+
+bool Driver_InterpretPing(Node node, Message msg, uint8_t* rx_buffer, uint8_t buf_len) {
+  // offset is the current index in the buffer
+  int offset = 0;
+  msg->type = rx_buffer[offset];
+  offset += sizeof(int8_t);
+
+  msg->senderId = rx_buffer[offset];
+  offset += sizeof(int8_t);
+
+  msg->recipientId = rx_buffer[offset];
+  offset += sizeof(int8_t);
+
+  msg->networkId = rx_buffer[offset];
+  offset += sizeof(int8_t);
+
+  msg->networkAge = rx_buffer[offset] + (rx_buffer[offset + 1] << 8) + (rx_buffer[offset + 2] << 16) + (rx_buffer[offset + 3] << 24)
+    + (rx_buffer[offset + 4] << 32) + (rx_buffer[offset + 5] << 40) + (rx_buffer[offset + 6] << 48) + (rx_buffer[offset + 7] << 56);
+  offset += sizeof(int64_t);
+
+  msg->timeSinceFrameStart = rx_buffer[offset] + (rx_buffer[offset + 1] << 8) + (rx_buffer[offset + 2] << 16) + (rx_buffer[offset + 3] << 24)
+    + (rx_buffer[offset + 4] << 32) + (rx_buffer[offset + 5] << 40) + (rx_buffer[offset + 6] << 48) + (rx_buffer[offset + 7] << 56);
+  offset += sizeof(int64_t);
+
+  msg->pingNum = rx_buffer[offset];
+  offset += sizeof(int16_t);
+
+  msg->NUM_SLOTS = rx_buffer[offset];
+  offset += sizeof(int8_t);
+  const int num_slots = msg->NUM_SLOTS;
+  if(num_slots != node->slotMap->NUM_SLOTS) {
+    // TODO: error handling
+    return false;
+  }
+
+  for(int i = 0; i < num_slots; ++i) {
+    msg->oneHopSlotStatus[i] = rx_buffer[offset + i];
+  };
+  offset += (sizeof(int8_t) * num_slots);
+
+  for(int i = 0; i < num_slots; ++i) {
+    msg->oneHopSlotIds[i] = rx_buffer[offset + i];
+  };
+  offset += sizeof(int8_t) * num_slots;
+
+  for(int i = 0; i < num_slots; ++i) {
+    msg->twoHopSlotStatus[i] = rx_buffer[offset + i];
+  };
+  offset += sizeof(int8_t) * num_slots;
+
+  for(int i = 0; i < num_slots; ++i) {
+    msg->twoHopSlotIds[i] = rx_buffer[offset + i];
+  };
+  offset += sizeof(int8_t) * num_slots;
+
+  if(offset+2 != buf_len) {
+    // TODO:error message and handling! We interpreted the packet wrongly!
+    return false;
+  }
+
+  return true;
+}
+
+
+
+
 
 void Driver_TransmitPoll(Node node, Message msg) {
   /* Turn off the receiver, so that a message can be sent */
@@ -296,11 +384,11 @@ void Driver_TransmitResponse(Node node, Message msg) {
 #endif
   } else {
   /* If we end up in here then we have not succeded in transmitting the packet we sent up.
-  POLL_RX_TO_RESP_TX_DLY_UUS is a critical value for porting to different processors. 
-  For slower platforms where the SPI is at a slower speed or the processor is operating at a lower 
+  POLL_RX_TO_RESP_TX_DLY_UUS is a critical value for porting to different processors.
+  For slower platforms where the SPI is at a slower speed or the processor is operating at a lower
   frequency (Comparing to STM32F, SPI of 18MHz and Processor internal 72MHz)this value needs to be increased.
-  Knowing the exact time when the responder is going to send its response is vital for time of flight 
-  calculation. The specification of the time of respnse must allow the processor enough time to do its 
+  Knowing the exact time when the responder is going to send its response is vital for time of flight
+  calculation. The specification of the time of respnse must allow the processor enough time to do its
   calculations and put the packet in the Tx buffer. So more time is required for a slower system(processor).
   */
 
@@ -406,7 +494,7 @@ void Driver_TransmitResult(Node node, Message msg) {
   distance = tof * SPEED_OF_LIGHT;
 
   /* Transmit distance back to the other node */
-  
+
   tx_result_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
 
   // write ID of source (own ID) and destination (intended recipient's ID); only one of the bytes is currently used
@@ -443,11 +531,8 @@ void Driver_TransmitResult(Node node, Message msg) {
 
   *node->driver->txFinishedFlag = true;
 
-#if DEBUG
+#if DEBUG_VERBOSE
   printf("Transmit resulting distance to Node %d: %f \n", msg->senderId, distance);
-#endif
-
-#if EVAL
   uint8_t slotNum = TimeKeeping_CalculateCurrentSlotNum(node);
   printf("TX DIST %d %f %d %d 0 \n", (int) msg->senderId, distance, (int) currentTime, (int) slotNum);
 #endif
@@ -466,7 +551,7 @@ void Driver_SetOutMsgAddress(Node node, Message *msgOutAddress) {
 
 bool Driver_IsReceiving(Node node) {
   uint32_t current_sys_status = dwt_read32bitoffsetreg(SYS_STATUS_ID, 0);
-  // check if RXPRD bit (bit 8) is set, which means the receiver detected a preamble; 
+  // check if RXPRD bit (bit 8) is set, which means the receiver detected a preamble;
   // this bit is cleared by the next receiver enable
   return ((current_sys_status & (1 << 8)) != 0);
 };

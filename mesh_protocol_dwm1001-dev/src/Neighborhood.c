@@ -42,7 +42,7 @@ static bool removeNeighbor(Node node, int8_t neighborId);
 
 Neighborhood Neighborhood_Create() {
   Neighborhood self = calloc(1, sizeof(NeighborhoodStruct));
-  
+
   // initialize values
   self->numOneHopNeighbors = 0;
   for(int i = 0; i < (MAX_NUM_NODES - 1); ++i) {
@@ -88,11 +88,11 @@ int8_t Neighborhood_GetOneHopNeighbors(Node node, int8_t *buffer, int8_t size) {
 };
 
 void Neighborhood_RemoveAbsentNeighbors(Node node) {
- 
+
   int8_t absentNeighbors[MAX_NUM_NODES - 1];
   int8_t numAbsentNeighbors = 0;
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
-  
+
   // find absent neighbors (neighbors that have not been seen for a time longer than the absentNeighborTimeOut)
   for(int i = 0; i < node->neighborhood->numOneHopNeighbors; ++i) {
     if(localTime > (node->neighborhood->oneHopNeighborsLastSeen[i] + node->config->absentNeighborTimeOut)) {
@@ -126,7 +126,7 @@ int8_t Neighborhood_GetNextRangingNeighbor(Node node) {
   };
 
   int16_t minIdx = Util_Int64tFindIdxOfMinimumInArray(&node->neighborhood->oneHopNeighborsLastRanging[0], node->neighborhood->numOneHopNeighbors);
-  int64_t lastRangingTime = node->neighborhood->oneHopNeighborsLastRanging[minIdx]; 
+  int64_t lastRangingTime = node->neighborhood->oneHopNeighborsLastRanging[minIdx];
 
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
   if (localTime < (lastRangingTime + node->config->rangingRefreshTime)) {
@@ -169,10 +169,10 @@ static bool removeNeighbor(Node node, int8_t neighborId) {
     return false;
   };
 
-  // decrement numOneHopNeighbors 
-  int8_t newNumNeighbors = --node->neighborhood->numOneHopNeighbors; 
+  // decrement numOneHopNeighbors
+  int8_t newNumNeighbors = --node->neighborhood->numOneHopNeighbors;
   // let last element of oneHopNeighbors array overwrite the neighbor that has to be removed (as order is not important)
-  node->neighborhood->oneHopNeighbors[idx] = node->neighborhood->oneHopNeighbors[newNumNeighbors]; 
+  node->neighborhood->oneHopNeighbors[idx] = node->neighborhood->oneHopNeighbors[newNumNeighbors];
   node->neighborhood->oneHopNeighborsLastSeen[idx] = node->neighborhood->oneHopNeighborsLastSeen[newNumNeighbors];
   node->neighborhood->oneHopNeighborsLastRanging[idx] = node->neighborhood->oneHopNeighborsLastRanging[newNumNeighbors];
   node->neighborhood->oneHopNeighborsLastDistance[idx] = node->neighborhood->oneHopNeighborsLastDistance[newNumNeighbors];

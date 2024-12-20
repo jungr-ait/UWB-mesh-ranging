@@ -39,8 +39,8 @@
 /** @file SlotMap.h
 *   @brief Maintains all internal slot maps
 *
-*   Struct contains all internal slot maps, which contain information about which slots are free, 
-*   occupied or colliding, the nodes that reserved them and when the status was last updated. It 
+*   Struct contains all internal slot maps, which contain information about which slots are free,
+*   occupied or colliding, the nodes that reserved them and when the status was last updated. It
 *   also maintains the pending slots of this node (slot that were reserved but not yet acknowledged)
 *   and the own slots (reserved and acknowledged). The functions are used to update the slot maps based
 *   on the current status and other parameters.
@@ -68,7 +68,7 @@ typedef struct SlotMapStruct * SlotMap;
 
 typedef enum SlotOccupancy SlotOccupancy;
 
-/** 
+/**
 * ONE HOP SLOT MAP
 * One hop means all nodes that are in direct range of this node; if one of these nodes sends a message, this node receives it
 * The one hop slot map of this node is included in its pings, so other nodes can update their two hop slot maps based on it (to make sure they do not reserve
@@ -91,38 +91,39 @@ typedef enum SlotOccupancy SlotOccupancy;
 *
 * THREE HOP SLOT MAP
 * Three hop means nodes that are neighbors of two hop neighbors of this node
-* The three hop slot map of this node is not included in its pings, as nodes are allowed to reserve slots that are already reserved in their four hop 
+* The three hop slot map of this node is not included in its pings, as nodes are allowed to reserve slots that are already reserved in their four hop
 * neighborhood, as these cannot lead to collisions
 *
 * threeHopSlotsStatus: same as oneHopSlotsStatus, only for three hop neighbors
 * threeHopSlotsIds: same as oneHopSlotsIds, only for three hop neighbors
 * threeHopSlotsLastUpdated: same as oneHopSlotsLastUpdated, only for three hop neighbors
 *
-* pendingSlots: array of slots that this node reserved but that were not acknowledged yet; 
+* pendingSlots: array of slots that this node reserved but that were not acknowledged yet;
 * numPendingSlots: number of pending slots of this node
-* pendingSlotsNeighbors: ID of the neighbors of the node at the time the corresponding pending slot was added; 
+* pendingSlotsNeighbors: ID of the neighbors of the node at the time the corresponding pending slot was added;
 *   these neighbors need to acknowledge the pending slot. Note: currently only the number of the acknowledgements is checked, but not the ID (simpler version)
 * localTimePendingSlotAdded: contains local time the corresponding pending slot was added
 * pendingSlotAcknowledgedBy: contains neighbors that have acknowledged the corresponding slot
-* ownSlots: array of slots this node reserved that were acknowledged 
+* ownSlots: array of slots this node reserved that were acknowledged
 * numOwnSlots: number of own slots of this node
-* collisionTimes: local times when this node received collisions; deleted regularly if older than one frame; 
+* collisionTimes: local times when this node received collisions; deleted regularly if older than one frame;
 * used to signal collisions to other nodes when this node is not in a network and therefore does not know slot numbers of colliding slots
-* numCollisionsRecorded: number of collisions in collisionTimes 
+* numCollisionsRecorded: number of collisions in collisionTimes
 * lastReservationTime: local time of the last time another node tried to reserve a slot (used for duty cycling)
 */
 typedef struct SlotMapStruct {
-  int oneHopSlotsStatus[NUM_SLOTS];
-  int8_t oneHopSlotsIds[NUM_SLOTS];
-  int64_t oneHopSlotsLastUpdated[NUM_SLOTS];
+  int8_t NUM_SLOTS;
+  uint8_t oneHopSlotsStatus[MAX_NUM_SLOTS];
+  int8_t oneHopSlotsIds[MAX_NUM_SLOTS];
+  int64_t oneHopSlotsLastUpdated[MAX_NUM_SLOTS];
 
-  int twoHopSlotsStatus[NUM_SLOTS];
-  int8_t twoHopSlotsIds[NUM_SLOTS];
-  int64_t twoHopSlotsLastUpdated[NUM_SLOTS];
+  uint8_t twoHopSlotsStatus[MAX_NUM_SLOTS];
+  int8_t twoHopSlotsIds[MAX_NUM_SLOTS];
+  int64_t twoHopSlotsLastUpdated[MAX_NUM_SLOTS];
 
-  int threeHopSlotsStatus[NUM_SLOTS];
-  int8_t threeHopSlotsIds[NUM_SLOTS];
-  int64_t threeHopSlotsLastUpdated[NUM_SLOTS];
+  uint8_t threeHopSlotsStatus[MAX_NUM_SLOTS];
+  int8_t threeHopSlotsIds[MAX_NUM_SLOTS];
+  int64_t threeHopSlotsLastUpdated[MAX_NUM_SLOTS];
 
   int8_t pendingSlots[MAX_NUM_PENDING_SLOTS];
   int8_t numPendingSlots;
@@ -137,12 +138,12 @@ typedef struct SlotMapStruct {
 } SlotMapStruct;
 
 /** Constructor */
-SlotMap SlotMap_Create();
+SlotMap SlotMap_Create(int8_t const num_slots);
 
 /** Update the one hop slot map of this node based on information in a ping of another node
 * @param node is the Node struct of the node that should perform this action
 * @param msg is a ping message from another node
-* @param currentSlot is the current slot at the time this message was received  
+* @param currentSlot is the current slot at the time this message was received
 */
 void SlotMap_UpdateOneHopSlotMap(Node node, Message msg, int8_t currentSlot);
 
@@ -164,7 +165,7 @@ void SlotMap_UpdateThreeHopSlotMap(Node node, Message msg);
 * @param size is the size of the buffer (to avoid illegal memory access)
 * return true if buffer contains the status; false if it failed
 */
-bool SlotMap_GetOneHopSlotMapStatus(Node node, int *buffer, int8_t size);
+bool SlotMap_GetOneHopSlotMapStatus(Node node, int8_t *buffer, int8_t size);
 
 /** Get the one hop IDs of all slots
 * @param node is the Node struct of the node that should perform this action
@@ -188,7 +189,7 @@ bool SlotMap_GetOneHopSlotMapLastUpdated(Node node, int64_t *buffer, int8_t size
 * @param size is the size of the buffer (to avoid illegal memory access)
 * return true if buffer contains the status; false if it failed
 */
-bool SlotMap_GetTwoHopSlotMapStatus(Node node, int *buffer, int8_t size);
+bool SlotMap_GetTwoHopSlotMapStatus(Node node, int8_t *buffer, int8_t size);
 
 /** Get the two hop IDs of all slots
 * @param node is the Node struct of the node that should perform this action
@@ -204,7 +205,7 @@ bool SlotMap_GetTwoHopSlotMapIds(Node node, int8_t *buffer, int8_t size);
 * @param size is the size of the buffer (to avoid illegal memory access)
 * return true if buffer contains the status; false if it failed
 */
-bool SlotMap_GetThreeHopSlotMapStatus(Node node, int *buffer, int8_t size);
+bool SlotMap_GetThreeHopSlotMapStatus(Node node, int8_t *buffer, int8_t size);
 
 /** Get the three hop IDs of all slots
 * @param node is the Node struct of the node that should perform this action
@@ -284,7 +285,7 @@ bool SlotMap_ChangePendingToOwn(Node node, int8_t slotNum);
 * @param collidingSlotsSize is the size of the array (to avoid illegal memory access)
 * return true if the network was created successfully; false if node cannot be sure that any other node received the initial ping of this node
 *
-* Checks if all own slots are colliding and no other node reserved a slot, which means this node cannot be 
+* Checks if all own slots are colliding and no other node reserved a slot, which means this node cannot be
 * sure that the network really exists (meaning any other node actually received a message from this node)
 */
 bool SlotMap_OwnNetworkExists(Node node, int8_t *collidingSlots, int8_t collidingSlotsSize);
@@ -300,7 +301,7 @@ bool SlotMap_ClearToSend(Node node);
 * @param node is the Node struct of the node that should perform this action
 * @param slotNum is the number of the slot that should be checked
 * return true if slot is free; false otherwise
-* 
+*
 * Check is based on all informations in the slot maps
 */
 bool SlotMap_SlotIsFree(Node node, int8_t slotNum);
@@ -309,7 +310,7 @@ bool SlotMap_SlotIsFree(Node node, int8_t slotNum);
 * @param node is the Node struct of the node that should perform this action
 * @param slotNum is the number of the slot that should be checked
 * return true if slot is free or reported as being occupied by this node; false otherwise
-* 
+*
 * "free for this node" means the slot can either be free or being reported occupied by this node in
 * any of the slot maps; it is then also fine for this node to use the slot
 */
@@ -386,21 +387,21 @@ bool SlotMap_ReleasePendingSlot(Node node, int8_t slotNum);
 
 /** Remove all expired slots from one hop slot map
 * @param node is the Node struct of the node that should perform this action
-* 
+*
 * Slots are expired if they timed out (see config for value)
 */
 void SlotMap_RemoveExpiredSlotsFromOneHopSlotMap(Node node);
 
 /** Remove all expired slots from two hop slot map
 * @param node is the Node struct of the node that should perform this action
-* 
+*
 * Slots are expired if they timed out (see config for value)
 */
 void SlotMap_RemoveExpiredSlotsFromTwoHopSlotMap(Node node);
 
 /** Remove all expired slots from three hop slot map
 * @param node is the Node struct of the node that should perform this action
-* 
+*
 * Slots are expired if they timed out (see config for value)
 */
 void SlotMap_RemoveExpiredSlotsFromThreeHopSlotMap(Node node);
@@ -423,7 +424,7 @@ int16_t SlotMap_RemoveExpiredOwnSlots(Node node, int8_t *buffer, int8_t size);
 
 /** Extend timeouts of slots after the node has slept
 * @param node is the Node struct of the node that should perform this action
-* 
+*
 * During sleeping, all slots would usually expire, that's why the timeouts have to be extended when the node
 * wakes up
 */

@@ -37,9 +37,9 @@
  */
 
 /** @file Node.h
-*   @brief The Node struct holds all other structs and is passed around to the functions so they can access the data they need 
-*   
-*   
+*   @brief The Node struct holds all other structs and is passed around to the functions so they can access the data they need
+*
+*
 */
 
 #ifndef NODE_H
@@ -67,7 +67,7 @@ typedef struct LCGStruct * LCG;
 typedef struct ConfigStruct * Config;
 
 /**
-* id: ID of this node (must be unique among all nodes whose networks could ever get in range of each other) 
+* id: ID of this node (must be unique among all nodes whose networks could ever get in range of each other)
 * stateMachine: struct that holds the data of the StateMachine
 * clock: struct that holds the data of the ProtocolClock
 * scheduler: struct that holds the data of the Scheduler
@@ -97,7 +97,7 @@ typedef struct NodeStruct{
 } NodeStruct;
 
 /** Constructor */
-Node Node_Create();
+Node Node_Create(void);
 
 /** Sets the StateMachine struct as a property of the Node struct
 * @param self is the Node struct

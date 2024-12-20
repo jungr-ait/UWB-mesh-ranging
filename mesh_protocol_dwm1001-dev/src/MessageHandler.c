@@ -63,12 +63,12 @@ void MessageHandler_HandlePingUnconnected(Node node, Message msg) {
 
   // add sending node as a neighbor
   Neighborhood_AddOrUpdateOneHopNeighbor(node, msg->senderId);
-};  
+};
 
 void MessageHandler_HandlePingConnected(Node node, Message msg) {
   // add or update "last time seen" of the neighbor who sent the message
   Neighborhood_AddOrUpdateOneHopNeighbor(node, msg->senderId);
-  
+
   // check if the sending node is in a different network
   bool isForeignPing = NetworkManager_IsPingFromForeignNetwork(node, msg);
 
@@ -99,14 +99,14 @@ void MessageHandler_HandlePingConnected(Node node, Message msg) {
     };
   } else {
     // ping is not from foreign network
-    
+
     // correct own time based on message
     correctOwnTime(node, msg);
 
     // update slots
     updateSlots(node, msg);
   };
-}; 
+};
 
 void MessageHandler_SendInitialPing(Node node) {
   // sending an initial ping means a network must be created, the frame start time must be set and the ping has to be sent
@@ -139,7 +139,7 @@ void MessageHandler_SendPing(Node node) {
   if (!isOwn && !isPending) {
     int8_t neighbors[MAX_NUM_NODES - 1];
 
-    // get the neighbors of the node at this particular time, cause these neighbors need to acknowledge the ping 
+    // get the neighbors of the node at this particular time, cause these neighbors need to acknowledge the ping
     // Note: currently only the number of neighbors that ack'ed is checked, not which neighbors exactly (simpler implementation)
     int8_t numNeighbors = Neighborhood_GetOneHopNeighbors(node, &neighbors[0], (MAX_NUM_NODES - 1));
     SlotMap_AddPendingSlot(node, currentSlot, &neighbors[0], numNeighbors);
@@ -167,7 +167,7 @@ void MessageHandler_SendRangingFinalMessage(Node node, Message responseMsgIn) {
 };
 
 void MessageHandler_SendRangingResultMessage(Node node, Message finalMsgIn) {
-  Driver_TransmitResult(node, finalMsgIn); 
+  Driver_TransmitResult(node, finalMsgIn);
 };
 
 
@@ -179,7 +179,7 @@ static void joinNetwork(Node node, Message msg) {
 
   // save the age of the network at the time when this node joined
   NetworkManager_SaveNetworkAgeAtJoining(node, networkAge);
-  
+
   // save the local time of this node at the time it joined the network
   int64_t localTime = ProtocolClock_GetLocalTime(node->clock);
   NetworkManager_SaveLocalTimeAtJoining(node, localTime);
@@ -188,14 +188,14 @@ static void joinNetwork(Node node, Message msg) {
   TimeKeeping_SetFrameStartTimeForLastPreamble(node, msg);
 
   // release possible own and pending slots when joining a new network, because these are not valid anymore
-  int8_t ownSlotsBuffer[NUM_SLOTS];
-  int8_t numOwn = SlotMap_GetOwnSlots(node, &ownSlotsBuffer[0], NUM_SLOTS);
+  int8_t ownSlotsBuffer[MAX_NUM_OWN_SLOTS];
+  int8_t numOwn = SlotMap_GetOwnSlots(node, &ownSlotsBuffer[0], MAX_NUM_OWN_SLOTS);
   for (int i = 0; i < numOwn; ++i) {
     SlotMap_ReleaseOwnSlot(node, ownSlotsBuffer[i]);
   };
 
-  int8_t pendingSlotsBuffer[NUM_SLOTS];
-  int8_t numPending = SlotMap_GetPendingSlots(node, &pendingSlotsBuffer[0], NUM_SLOTS);
+  int8_t pendingSlotsBuffer[MAX_NUM_PENDING_SLOTS];
+  int8_t numPending = SlotMap_GetPendingSlots(node, &pendingSlotsBuffer[0], MAX_NUM_PENDING_SLOTS);
   for (int i = 0; i < numPending; ++i) {
     SlotMap_ReleasePendingSlot(node, pendingSlotsBuffer[i]);
   };
@@ -208,14 +208,14 @@ static void joinNetwork(Node node, Message msg) {
 static void updateSlots(Node node, Message msg) {
   // first update the acknowledgements of pending slots (if the sender of the message acknowledged a pending slot of this node)
   SlotMap_UpdatePendingSlotAcks(node, msg);
-  
+
   // add pending slots that were acknowledged by all required nodes to own slots
   int8_t acknowledgedPendingSlots[MAX_NUM_PENDING_SLOTS];
   int8_t numAcked = SlotMap_GetAcknowledgedPendingSlots(node, &acknowledgedPendingSlots[0], MAX_NUM_PENDING_SLOTS);
   for(int i = 0; i < numAcked; ++i) {
     SlotMap_ChangePendingToOwn(node, acknowledgedPendingSlots[i]);
   };
-  
+
   // check if own slots were reported as colliding by the sending node
   int8_t collidingOwnSlots[MAX_NUM_OWN_SLOTS];
   int8_t numCollidingOwn = SlotMap_CheckOwnSlotsForCollisions(node, msg, &collidingOwnSlots[0], MAX_NUM_OWN_SLOTS);
@@ -236,11 +236,11 @@ static void updateSlots(Node node, Message msg) {
   // update the internal slot maps of this nodes with the information in the message
   uint8_t currentSlot = TimeKeeping_CalculateCurrentSlotNum(node);
   SlotMap_UpdateOneHopSlotMap(node, msg, currentSlot);
-  
+
   SlotMap_UpdateTwoHopSlotMap(node, msg);
   SlotMap_UpdateThreeHopSlotMap(node, msg);
 
-  // cancel the next schedule if the corresponding slot was released 
+  // cancel the next schedule if the corresponding slot was released
   int8_t nextScheduledSlot = Scheduler_GetSlotOfNextSchedule(node);
   int16_t idxCollidingOwn = Util_Int8tArrayFindElement(&collidingOwnSlots[0], nextScheduledSlot, numCollidingOwn);
   int16_t idxCollidingPending = Util_Int8tArrayFindElement(&collidingPendingSlots[0], nextScheduledSlot, numCollidingPending);
@@ -261,8 +261,8 @@ static void updateSlots(Node node, Message msg) {
 static bool createPingMessage(Node node, Message msg) {
   msg->type = PING;
   msg->senderId = node->id;
-
-  // add one hop and two hop slot maps to the message so receiving nodes 
+  int8_t const NUM_SLOTS = node->slotMap->NUM_SLOTS;
+  // add one hop and two hop slot maps to the message so receiving nodes
   // get information about their two and three hop neighbors
   SlotMap_GetOneHopSlotMapStatus(node, &msg->oneHopSlotStatus[0], NUM_SLOTS);
   SlotMap_GetOneHopSlotMapIds(node, &msg->oneHopSlotIds[0], NUM_SLOTS);

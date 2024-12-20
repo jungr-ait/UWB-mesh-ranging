@@ -77,7 +77,7 @@ static uint64 get_rx_timestamp_u64(void);
 static uint64 get_systime_u64(void);
 static void initializeConfigStructs(StateMachine stateMachine, Scheduler scheduler, ProtocolClock clock, TimeKeeping timeKeeping,
   NetworkManager networkManager, MessageHandler messageHandler, SlotMap slotMap, Neighborhood neighborhood, RangingManager rangingManager,
-  LCG lcg, Config protocolConfig, Driver driver);
+  LCG lcg, Config protocolConfig, Driver driver, int8_t const num_slots);
 
 // pointer to node and time are needed in the timer event function, so we pass them as a struct
 typedef struct TimerContextStruct * TimerContext;
@@ -138,8 +138,15 @@ int main(void) {
   bool txFinished = true;
   int64_t time = 0;
 
+  // TODO: load as user defined variables from flash
   int id = NODE_ID;
   uint32_t seed = RANDOM_SEED;
+  int8_t const num_slots = NUM_SLOTS_g;
+
+  if (num_slots > MAX_NUM_SLOTS) {
+    printf("MAX_NUM_SLOTS exceeded!\n");
+    while (1) {};
+  }
 
   /* Create all the structs that hold the data of the node */
   // we cannot use the Constructors on DWM1001-DEV, because they allocate the structs on the heap;
@@ -164,7 +171,7 @@ int main(void) {
 
   initializeConfigStructs(&stateMachine, &scheduler, &clock, &timeKeeping,
     &networkManager, &messageHandler, &slotMap, &neighborhood, &rangingManager,
-    &lcg, &protocolConfig, &driver);
+    &lcg, &protocolConfig, &driver, num_slots);
 
   // set the structs as pointers for the Node struct, so we only have to pass around the Node struct
   Node_SetDriver(&node, &driver);
@@ -482,68 +489,34 @@ int main(void) {
   #if DEBUG || DEBUG_VERBOSE
           printf("%d: Node %" PRId8 " received ping message in slot %" PRIu8 " \r\n", (int) localTime, node.id, slotNum);
   #endif
-          // it is not a ranging message (i.e. it is a PING)
-          int offset = 0;
-          // create values out of the byte array by shifting the bits correctly
-          int32_t type = (rx_buffer[offset]) + (rx_buffer[offset + 1] << 8) + (rx_buffer[offset + 2] << 16) + (rx_buffer[offset + 3] << 24);
-
-          msg->type = PING;
-
-          offset += sizeof(int);
-          msg->senderId = rx_buffer[offset];
-
-          offset += sizeof(int8_t);
-          msg->recipientId = rx_buffer[offset];
-
-          offset += sizeof(int8_t);
-          msg->networkId = rx_buffer[offset];
-
-          offset += sizeof(int8_t);
-          msg->networkAge = rx_buffer[offset] + (rx_buffer[offset + 1] << 8) + (rx_buffer[offset + 2] << 16) + (rx_buffer[offset + 3] << 24)
-            + (rx_buffer[offset + 4] << 32) + (rx_buffer[offset + 5] << 40) + (rx_buffer[offset + 6] << 48) + (rx_buffer[offset + 7] << 56);
-
-          offset += sizeof(int64_t);
-          msg->timeSinceFrameStart = rx_buffer[offset] + (rx_buffer[offset + 1] << 8) + (rx_buffer[offset + 2] << 16) + (rx_buffer[offset + 3] << 24)
-            + (rx_buffer[offset + 4] << 32) + (rx_buffer[offset + 5] << 40) + (rx_buffer[offset + 6] << 48) + (rx_buffer[offset + 7] << 56);
-
-          offset += sizeof(int64_t);
-          for(int i = 0; i < NUM_SLOTS; ++i) {
-            msg->oneHopSlotStatus[i] = (rx_buffer[offset + i*sizeof(int)]) + (rx_buffer[offset + i*sizeof(int) + 1] << 8) + (rx_buffer[offset + i*sizeof(int) + 2] << 16) + (rx_buffer[offset + i*sizeof(int) + 3] << 24);
-          };
-
-          offset += (sizeof(int) * NUM_SLOTS);
-          for(int i = 0; i < NUM_SLOTS; ++i) {
-            msg->oneHopSlotIds[i] = rx_buffer[offset + i];
-          };
-
-          offset += sizeof(int8_t) * NUM_SLOTS;
-          for(int i = 0; i < NUM_SLOTS; ++i) {
-            msg->twoHopSlotStatus[i] = (rx_buffer[offset + i*sizeof(int)]) + (rx_buffer[offset + i*sizeof(int) + 1] << 8) + (rx_buffer[offset + i*sizeof(int) + 2] << 16) + (rx_buffer[offset + i*sizeof(int) + 3] << 24);
-          };
-
-          offset += sizeof(int) * NUM_SLOTS;
-          for(int i = 0; i < NUM_SLOTS; ++i) {
-            msg->twoHopSlotIds[i] = rx_buffer[offset + i];
-          };
-
-          offset += sizeof(int8_t) * NUM_SLOTS;
-          msg->pingNum = rx_buffer[offset];
-
+          if(!Driver_InterpretPing(&node, msg, rx_buffer, frame_len)) {
+            printf("Driver_InterpretPing failed!");
+            break;
+          }
           // use the current time and subtract the difference between the rx_timestamp and the systime of the DW1000 to
           // account for messages that take more than 1ms to complete
           msg->timestamp = currentTime - timediffToNow;
 
   #if DEBUG_VERBOSE
           // print information about the received message (if debugging, keep in mind this is what the other node "sees", not this one)
-          printf("Type: % " PRId32 " \n", type);
+          printf("Type: % " PRId8 " \n", msg->type);
           printf("Sender: %" PRId8 "\n", msg->senderId);
           printf("Network: %" PRIu8 "\n", msg->networkId);
-          for(int i = 0; i < NUM_SLOTS; ++i) {
-            printf("1H (S%d): %d \n", (i+1), msg->oneHopSlotStatus[i]);
-            printf("1H ID (S%d): %" PRId8 "\n", (i+1), msg->oneHopSlotIds[i]);
-            printf("2H (S%d): %d \n", (i+1), msg->twoHopSlotStatus[i]);
-            printf("2H ID (S%d): %" PRId8 "\n", (i+1), msg->twoHopSlotIds[i]);
-          };
+          for(int8_t i = 0; i < node.slotMap->NUM_SLOTS; ++i) {
+            printf("1H [S%"PRId8"]: STAT:%"PRId8 " | ID:%" PRId8 "\n", (i+1), msg->oneHopSlotStatus[i],  msg->oneHopSlotIds[i]);
+          }
+          bool any_two_hop = false;
+          for(int8_t i = 0; i < node.slotMap->NUM_SLOTS; ++i) {
+            if(msg->twoHopSlotStatus[i] != 0) {
+                any_two_hop = true;
+                break;
+            }
+          }
+          if(any_two_hop) {
+            for(int8_t i = 0; i < node.slotMap->NUM_SLOTS; ++i) {
+              printf("2H [S%"PRId8"]: STAT:%"PRId8 " | ID:%" PRId8 "\n", (i+1), msg->twoHopSlotStatus[i],  msg->twoHopSlotIds[i]);
+            };
+          }
   #endif
 
   #if DEBUG || DEBUG_VERBOSE
@@ -622,7 +595,7 @@ static uint64 get_systime_u64(void)
 
 static void initializeConfigStructs(StateMachine stateMachine, Scheduler scheduler, ProtocolClock clock, TimeKeeping timeKeeping,
   NetworkManager networkManager, MessageHandler messageHandler, SlotMap slotMap, Neighborhood neighborhood, RangingManager rangingManager,
-  LCG lcg, Config protocolConfig, Driver driver) {
+  LCG lcg, Config protocolConfig, Driver driver, int8_t const num_slots) {
 
   // do all the static initialization
 
@@ -649,8 +622,9 @@ static void initializeConfigStructs(StateMachine stateMachine, Scheduler schedul
   networkManager->networkStatus = NOT_CONNECTED;
 
   // SlotMap
+  slotMap->NUM_SLOTS = num_slots;
   int i;
-  for (i = 0; i < NUM_SLOTS; ++i) {
+  for (i = 0; i < MAX_NUM_SLOTS; ++i) {
     slotMap->oneHopSlotsStatus[i] = 0;
     slotMap->oneHopSlotsIds[i] = 0;
     slotMap->oneHopSlotsLastUpdated[i] = 0;
@@ -694,13 +668,13 @@ static void initializeConfigStructs(StateMachine stateMachine, Scheduler schedul
   // Config
   // 6 nodes:
   protocolConfig->slotLength = 200;
-  protocolConfig->frameLength = protocolConfig->slotLength*NUM_SLOTS;
-  protocolConfig->slotGoal = NUM_SLOTS/2;
+  protocolConfig->frameLength = protocolConfig->slotLength*num_slots;
+  protocolConfig->slotGoal = 1;
   protocolConfig->initialPingUpperLimit = protocolConfig->frameLength;
   protocolConfig->initialWaitTime = protocolConfig->frameLength + protocolConfig->slotLength;
-  protocolConfig->guardPeriodLength = protocolConfig->slotLength*0.1+1 ;
+  protocolConfig->guardPeriodLength = 10;
   protocolConfig->networkAgeToleranceSameNetwork = protocolConfig->slotLength/2;
-  protocolConfig->rangingTimeOut = protocolConfig->slotLength*0.1;
+  protocolConfig->rangingTimeOut = 10;
   protocolConfig->slotExpirationTimeOut = protocolConfig->frameLength + protocolConfig->slotLength;
   protocolConfig->ownSlotExpirationTimeOut = protocolConfig->frameLength*2+protocolConfig->slotLength;
   protocolConfig->absentNeighborTimeOut = protocolConfig->frameLength*1.5;

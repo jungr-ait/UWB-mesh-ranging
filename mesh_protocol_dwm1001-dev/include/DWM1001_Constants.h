@@ -40,7 +40,7 @@
 *   @brief Defines certain constants and config values that are used for the DWM1001-DEV;
 *   Most of the content has been copied from Decawave examples 05a and 05b (Double Sided Two way ranging) which contain
 *   more explanation on some of the variables and definitions
-*/  
+*/
 
 #ifndef DWM1001_CONSTANTS_H
 #define DWM1001_CONSTANTS_H
@@ -49,7 +49,7 @@
 
 #define EVAL 1
 #define DEBUG 0
-#define DEBUG_VERBOSE 0
+#define DEBUG_VERBOSE 1
 
 
 typedef signed long long int64;
@@ -109,7 +109,7 @@ static uint8 rx_result_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0
 /* Maximum value timeout with DW1000 is 65ms; 0 means no timeout */
 #define RX_TIMEOUT 0
 /* Delay between frames, in UWB microseconds. */
-#define POLL_TX_TO_RESP_RX_DLY_UUS 100 
+#define POLL_TX_TO_RESP_RX_DLY_UUS 100
 
 static dwt_config_t config = {
     5,                /* Channel number. */

@@ -39,7 +39,7 @@
 /** @file Driver.h
 *   @brief Simulation Driver that takes messages from the protocol that should be sent and writes them to a specific address
 *
-*/  
+*/
 
 #ifndef DRIVER_H
 #define DRIVER_H
@@ -65,14 +65,14 @@ typedef struct DriverStruct{
   // only for simulation
   /** address where sent messages are written to by this driver */
   Message * msgOutAddress;
-  
+
   /** flag read by MatlabWrapper to determine whether message has been sent and needs to send to MATLAB */
-  bool sentMessage; 
+  bool sentMessage;
 
   int64_t lastTxStartTime;
 } DriverStruct;
 
-/** Constructor 
+/** Constructor
 * @param txFinishedFlag is a pointer to the address that signals if sending is finished; may be changed externally
 * @param isReceiving is a pointer to the address that signals if the node is currently receiving a transmission; may be changed externally
 */
@@ -89,6 +89,12 @@ bool Driver_SendingFinished(Node node);
 * @param msg is the Message struct that contains the information of the ping
 */
 void Driver_TransmitPing(Node node, Message msg);
+
+/** Interpret a ping
+* @param node is the Node struct of the node that should perform this action
+* @param msg is the Message struct that contains the information of the ping
+*/
+bool Driver_InterpretPing(Node node, Message msg, uint8_t* rx_buffer, uint8_t buf_len);
 
 /** Transmit a poll
 * @param node is the Node struct of the node that should perform this action
