@@ -1,3 +1,6 @@
-mesh_protocol_dwm1001-dev/SES/Output/nrf52832_xxaa/Obj/MeshProtocolFull_DWM1001-DEV
 matlab_simulation/data/*.mat
 matlab_simulation/src/*.mex*
+*.mexa64
+*.asv
+mesh_protocol_dwm1001-dev/SES/Output/*
+

@@ -42,6 +42,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 
+#include "../include/Constants.h"
 #include "../include/Node.h"
 #include "../include/StateMachine.h"
 #include "../include/Scheduler.h"
@@ -70,11 +71,11 @@ APP_TIMER_DEF(m_repeated_timer_id);     /**< Handler for repeated timer used to 
 
 static uint32 status_reg = 0;
 
-static timetic_flag = false;
+static bool timetic_flag = false;
 
 static uint64 get_rx_timestamp_u64(void);
 static uint64 get_systime_u64(void);
-static void initializeConfigStructs(StateMachine stateMachine, Scheduler scheduler, ProtocolClock clock, TimeKeeping timeKeeping, 
+static void initializeConfigStructs(StateMachine stateMachine, Scheduler scheduler, ProtocolClock clock, TimeKeeping timeKeeping,
   NetworkManager networkManager, MessageHandler messageHandler, SlotMap slotMap, Neighborhood neighborhood, RangingManager rangingManager,
   LCG lcg, Config protocolConfig, Driver driver);
 
@@ -105,10 +106,10 @@ static void repeated_timer_handler(void * p_context)
   // cast the context pointer back to a the struct
   TimerContextStruct *ctx = (TimerContextStruct*) p_context;
 
-  // set flag that makes StateMachine run 
+  // set flag that makes StateMachine run
   timetic_flag = true;
   // increment the time
-  ++(*(ctx->time));       
+  ++(*(ctx->time));
 }
 
 /**@brief Create timers.
@@ -129,16 +130,10 @@ int main(void) {
   lfclk_request();
   app_timer_init();
 
-  // keep looping/waiting until user presses the button
-  // pull pin up, cause button is connected to ground
-  nrf_gpio_cfg_input(START_BTN_GPIO_PIN,NRF_GPIO_PIN_PULLUP);
-  while (1) {
-    int res = nrf_gpio_pin_read(START_BTN_GPIO_PIN);
-    if (res == 0) {
-      // break when button is pushed
-      break;
-    };
-  };
+    /* Configure board. */
+  bsp_board_leds_init();
+
+
   // these variables must be in scope during the whole execution
   bool txFinished = true;
   int64_t time = 0;
@@ -163,11 +158,11 @@ int main(void) {
   struct RangingManagerStruct rangingManager;
   struct LCGStruct lcg;
   lcg.next = seed;
-  struct ConfigStruct protocolConfig; 
+  struct ConfigStruct protocolConfig;
   struct DriverStruct driver;
   driver.txFinishedFlag = &txFinished;
 
-  initializeConfigStructs(&stateMachine, &scheduler, &clock, &timeKeeping, 
+  initializeConfigStructs(&stateMachine, &scheduler, &clock, &timeKeeping,
     &networkManager, &messageHandler, &slotMap, &neighborhood, &rangingManager,
     &lcg, &protocolConfig, &driver);
 
@@ -196,7 +191,7 @@ int main(void) {
   timerContext.time = &time;
 
   create_timers();
-  
+
   // start timer
   ret_code_t err_code;
   err_code = app_timer_start(m_repeated_timer_id, APP_TIMER_TICKS(TICS_PER_SECOND/1000), &timerContext);
@@ -204,22 +199,38 @@ int main(void) {
 
   /* Set up DWM1000 */
 
-  /* Setup DW1000 IRQ pin */  
-  nrf_gpio_cfg_input(DW1000_IRQ, NRF_GPIO_PIN_NOPULL); 		//irq
+  /* Setup DW1000 IRQ pin */
+  nrf_gpio_cfg_input(DW1000_IRQ, NRF_GPIO_PIN_NOPULL);          //irq
 
   /*Initialization UART*/
   boUART_Init ();
-  
+
+  // keep looping/waiting until user presses the button
+  // pull pin up, cause button is connected to ground
+  nrf_gpio_cfg_input(START_BTN_GPIO_PIN, NRF_GPIO_PIN_PULLUP);
+
+  printf("DW1000: ID=%i\n", id);
+  printf("DW1000: waiting for START_BTN... \n");
+  while (1) {
+    int res = nrf_gpio_pin_read(START_BTN_GPIO_PIN);
+    if (res == 0) {
+      // break when button is pushed
+      break;
+    };
+  };
+
   /* Reset DW1000 */
-  reset_DW1000(); 
+  reset_DW1000();
 
   /* Set SPI clock to 2MHz */
-  port_set_dw1000_slowrate();			
-  
+  port_set_dw1000_slowrate();
+
+
   /* Init the DW1000 */
   if (dwt_initialise(DWT_LOADUCODE) == DWT_ERROR)
   {
     //Init of DW1000 Failed
+    printf("DW1000::dwt_initialise():Failed \n");
     while (1) {};
   }
 
@@ -230,7 +241,7 @@ int main(void) {
   // Add antenna delay to driver so it can be read when handling the ranging messages
   node.driver->rx_antenna_delay = ant_delay;
   node.driver->tx_antenna_delay = ant_delay;
-  
+
   // Set SPI to 8MHz clock
   port_set_dw1000_fastrate();
 
@@ -243,7 +254,7 @@ int main(void) {
 
   /* Set preamble timeout for expected frames. */
   dwt_setpreambledetecttimeout(PRE_TIMEOUT); // PRE_TIMEOUT; specified as multiple of PAC size; e.g. PAC size 8 takes roughly 8us to transmit, timeout of 125 then equals 1ms; 0 means no timeout
-          
+
   /* Set expected response's delay and timeout. */
   dwt_setrxaftertxdelay(POLL_TX_TO_RESP_RX_DLY_UUS);
   dwt_setrxtimeout(RX_TIMEOUT); // Maximum value timeout with DW1000 is 65ms; 0 means no timeout
@@ -287,7 +298,7 @@ int main(void) {
         // received message
         int64_t localTime = ProtocolClock_GetLocalTime((&node)->clock);
         uint8_t slotNum = TimeKeeping_CalculateCurrentSlotNum((&node));
-      
+
         uint32 frame_len;
 
         /* Clear good RX frame event in the DW1000 status register. */
@@ -306,7 +317,8 @@ int main(void) {
         msg = &message;
 
         // first check if it is a ranging message or not
-        if (dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RNG) {
+        if (dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RNG)
+        {
           // it is a ranging message
 
           /* Check that the frame is a poll sent by "SS TWR initiator" example.
@@ -314,9 +326,10 @@ int main(void) {
           rx_buffer[ALL_MSG_SN_IDX] = 0;
 
           // check if this node is the intended recipient of the message
-          if (rx_buffer[DESTINATION_ID_IDX] == node.id) {
+          if (rx_buffer[DESTINATION_ID_IDX] == node.id)
+          {
             // determine the type of ranging message
-            if (memcmp(rx_buffer, rx_poll_msg, ALL_MSG_COMMON_LEN_FIRST_PART) == 0 
+            if (memcmp(rx_buffer, rx_poll_msg, ALL_MSG_COMMON_LEN_FIRST_PART) == 0
               && rx_buffer[MSG_IDX_SECOND_PART] == rx_poll_msg[MSG_IDX_SECOND_PART]) {
               // it is a POLL
 
@@ -341,10 +354,10 @@ int main(void) {
               // add pointer to rx_buffer to the message so the Driver can access it
               msg->rx_buffer = &rx_buffer[0];
               msg->frame_len = frame_len;
-        
+
               // run state machine (happens after this if/else structure)
 
-            } else if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN_FIRST_PART) == 0 
+            } else if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN_FIRST_PART) == 0
               && rx_buffer[MSG_IDX_SECOND_PART] == rx_resp_msg[MSG_IDX_SECOND_PART]) {
               // it is a RESPONSE
 
@@ -358,7 +371,7 @@ int main(void) {
               printf("%d: Node %" PRId8 " received RESPONSE in slot %" PRIu8 " \r\n", (int) localTime, node.id, slotNum);
   #endif
               msg->type = RESPONSE;
-          
+
               msg->recipientId = rx_buffer[DESTINATION_ID_IDX];
               msg->senderId = rx_buffer[SOURCE_ID_IDX];
 
@@ -372,7 +385,7 @@ int main(void) {
 
               // run state machine (happens after this if/else structure
 
-            } else if (memcmp(rx_buffer, rx_final_msg, ALL_MSG_COMMON_LEN_FIRST_PART) == 0 
+            } else if (memcmp(rx_buffer, rx_final_msg, ALL_MSG_COMMON_LEN_FIRST_PART) == 0
               && rx_buffer[MSG_IDX_SECOND_PART] == rx_final_msg[MSG_IDX_SECOND_PART]) {
               // it is a FINAL
               /* Calculate timestamp of arrival in time tics */
@@ -385,7 +398,7 @@ int main(void) {
               printf("%d: Node %" PRId8 " received FINAL in slot %" PRIu8 " \r\n", (int) localTime, node.id, slotNum);
   #endif
               msg->type = FINAL;
-          
+
               msg->recipientId = rx_buffer[DESTINATION_ID_IDX];
               msg->senderId = rx_buffer[SOURCE_ID_IDX];
 
@@ -398,8 +411,8 @@ int main(void) {
               msg->frame_len = frame_len;
 
               // run state machine (happens after this if/else structure
-                    
-            } else if (memcmp(rx_buffer, rx_result_msg, ALL_MSG_COMMON_LEN_FIRST_PART) == 0 
+
+            } else if (memcmp(rx_buffer, rx_result_msg, ALL_MSG_COMMON_LEN_FIRST_PART) == 0
               && rx_buffer[MSG_IDX_SECOND_PART] == rx_result_msg[MSG_IDX_SECOND_PART]) {
               // it is a RESULT
 
@@ -442,8 +455,9 @@ int main(void) {
   #endif
   #if EVAL
               uint8_t slotNum = TimeKeeping_CalculateCurrentSlotNum(&node);
-              printf("RX DIST %d %f %d %d 0 \n", msg->senderId, distance, (int) (currentTime - timediffToNow), (int) slotNum);
+              printf("RX DIST %d %f %d %d \n", msg->senderId, distance, (int) (currentTime - timediffToNow), (int) slotNum);
   #endif
+              bsp_board_led_invert(BSP_BOARD_LED_0);
             };
 
             // fix the time so that it does not change during execution of state machine
@@ -454,10 +468,10 @@ int main(void) {
 
             // unfix the time
             ProtocolClock_UnfixLocalTime(node.clock);
-          
           };
 
-        } else {
+        }
+        else { // no ranging -> PING
 
           /* Calculate timestamp of arrival in time tics */
           int64_t currentTime = ProtocolClock_GetLocalTime((&node)->clock);
@@ -545,12 +559,12 @@ int main(void) {
           // unfix the time
           ProtocolClock_UnfixLocalTime(node.clock);
 
-        
+
   #if EVAL
           uint8_t slotNum = TimeKeeping_CalculateCurrentSlotNum(&node);
           printf("RX PING %d 0 %d %d %d \n", msg->senderId, (int) (currentTime - timediffToNow), (int) slotNum, (int) msg->pingNum);
   #endif
-
+          bsp_board_led_invert(BSP_BOARD_LED_1);
         };
 
         // clear the rx_buffer
@@ -606,7 +620,7 @@ static uint64 get_systime_u64(void)
   return ts;
 }
 
-static void initializeConfigStructs(StateMachine stateMachine, Scheduler scheduler, ProtocolClock clock, TimeKeeping timeKeeping, 
+static void initializeConfigStructs(StateMachine stateMachine, Scheduler scheduler, ProtocolClock clock, TimeKeeping timeKeeping,
   NetworkManager networkManager, MessageHandler messageHandler, SlotMap slotMap, Neighborhood neighborhood, RangingManager rangingManager,
   LCG lcg, Config protocolConfig, Driver driver) {
 
@@ -662,7 +676,7 @@ static void initializeConfigStructs(StateMachine stateMachine, Scheduler schedul
     slotMap->ownSlots[i] = 0;
   };
   slotMap->lastReservationTime = 0;
-  
+
   // Neighborhood
   neighborhood->numOneHopNeighbors = 0;
   for (i = 0; i < (MAX_NUM_NODES - 1); ++i) {
@@ -679,25 +693,25 @@ static void initializeConfigStructs(StateMachine stateMachine, Scheduler schedul
 
   // Config
   // 6 nodes:
-  protocolConfig->frameLength = 1200;
   protocolConfig->slotLength = 200;
-  protocolConfig->slotGoal = 1;
-  protocolConfig->initialPingUpperLimit = 1000;
-  protocolConfig->initialWaitTime = 1200;
-  protocolConfig->guardPeriodLength = 20;
-  protocolConfig->networkAgeToleranceSameNetwork = 19; 
-  protocolConfig->rangingTimeOut = 20;
-  protocolConfig->slotExpirationTimeOut = 1400;
-  protocolConfig->ownSlotExpirationTimeOut = 2400; 
-  protocolConfig->absentNeighborTimeOut = 1800; 
-  protocolConfig->rangingRefreshTime = 160; 
-  protocolConfig->occupiedTimeout = 2400;
-  protocolConfig->occupiedToFreeTimeoutMultiHop = 1400;
-  protocolConfig->collidingTimeoutMultiHop = 1200;
-  protocolConfig->collidingTimeout = 200;
+  protocolConfig->frameLength = protocolConfig->slotLength*NUM_SLOTS;
+  protocolConfig->slotGoal = NUM_SLOTS/2;
+  protocolConfig->initialPingUpperLimit = protocolConfig->frameLength;
+  protocolConfig->initialWaitTime = protocolConfig->frameLength + protocolConfig->slotLength;
+  protocolConfig->guardPeriodLength = protocolConfig->slotLength*0.1+1 ;
+  protocolConfig->networkAgeToleranceSameNetwork = protocolConfig->slotLength/2;
+  protocolConfig->rangingTimeOut = protocolConfig->slotLength*0.1;
+  protocolConfig->slotExpirationTimeOut = protocolConfig->frameLength + protocolConfig->slotLength;
+  protocolConfig->ownSlotExpirationTimeOut = protocolConfig->frameLength*2+protocolConfig->slotLength;
+  protocolConfig->absentNeighborTimeOut = protocolConfig->frameLength*1.5;
+  protocolConfig->rangingRefreshTime = protocolConfig->slotLength*0.75;
+  protocolConfig->occupiedTimeout = protocolConfig->frameLength*2;
+  protocolConfig->occupiedToFreeTimeoutMultiHop = protocolConfig->slotExpirationTimeOut;
+  protocolConfig->collidingTimeoutMultiHop = protocolConfig->frameLength;
+  protocolConfig->collidingTimeout = protocolConfig->slotLength;
 
   protocolConfig->sleepFrames = 0;
   protocolConfig->wakeFrames = 0; // only relevant if sleepFrames set
-  // Driver  
+  // Driver
   driver->lastTxStartTime = 0;
 };

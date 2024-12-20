@@ -84,7 +84,7 @@ static uint8 rx_result_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0
 #define FINAL_MSG_TS_LEN 4
 
 /* UWB microsecond (uus) to device time unit (dtu, around 15.65 ps) conversion factor.
- * 1 uus = 512 / 499.2 �s and 1 �s = 499.2 * 128 dtu. */
+ * 1 uus = 512 / 499.2 us and 1 us = 499.2 * 128 dtu. */
 #define UUS_TO_DWT_TIME 65536
 
 // to convert from regular microseconds to DWT (e.g. timestamps read from DW1000) or the other way round (dive DWT by this to get us)
